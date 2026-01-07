@@ -6,8 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- DOM Elements ---
     const itemList = document.getElementById('item-list');
-    const form = document.getElementById('add-item-form');
-    const input = document.getElementById('new-item-input');
+    // Removed legacy form elements
     const resetBtn = document.getElementById('reset-btn');
     const themeToggle = document.getElementById('theme-toggle');
     const body = document.body;
@@ -16,7 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const MOON_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
     const SUN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
     const TRASH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-
     const HANDLE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drag-icon"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>`;
 
     // --- Init ---
@@ -27,46 +25,81 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof Sortable !== 'undefined') {
         Sortable.create(itemList, {
             animation: 150,
-            handle: '.drag-handle', // Only drag when pulling the icon
+            handle: '.drag-handle',
+            filter: '.ghost', // Prevent dragging ghost
             ghostClass: 'sortable-ghost',
+            onMove: function (evt) {
+                // Prevent dropping items below the ghost item
+                return !evt.related.classList.contains('ghost');
+            },
             onEnd: function (evt) {
-                // Reorder items array based on new DOM order
+                // Reorder items array
+                // Since ghost is always last and we can't drop below it, the indices map correctly to items array
                 const movedItem = items.splice(evt.oldIndex, 1)[0];
                 items.splice(evt.newIndex, 0, movedItem);
                 saveItems();
             },
         });
     } else {
-        console.warn("SortableJS not loaded. Drag & Drop disabled.");
+        console.warn("SortableJS not loaded.");
     }
 
     // --- Event Listeners ---
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        addItem();
-    });
 
-    // Event Delegation for List Items
+    // Event Delegation for List
     itemList.addEventListener('click', (e) => {
         const itemEl = e.target.closest('.item');
-        if (!itemEl) return;
+        if (!itemEl || itemEl.classList.contains('ghost')) return; // Ignore clicks on ghost controls if any
+
         const id = itemEl.dataset.id;
 
-        // Checkbox Click
+        // Checkbox
         if (e.target.closest('.checkbox')) {
             toggleItem(id);
         }
-        // Delete Button Click
+        // Delete
         else if (e.target.closest('.delete-btn')) {
             deleteItem(id);
         }
     });
 
+    // Content Edits (Input)
     itemList.addEventListener('input', (e) => {
-        // Edit Text
         if (e.target.classList.contains('item-text')) {
-            const id = e.target.closest('.item').dataset.id;
-            updateItemText(id, e.target.innerText);
+            const itemEl = e.target.closest('.item');
+            if (!itemEl.classList.contains('ghost')) {
+                const id = itemEl.dataset.id;
+                updateItemText(id, e.target.innerText);
+            }
+        }
+    });
+
+    // Keydown (Enter) - Commit Ghost or Blur
+    itemList.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.classList.contains('item-text')) {
+            e.preventDefault(); // Prevent newline
+            const itemEl = e.target.closest('.item');
+            if (itemEl.classList.contains('ghost')) {
+                commitGhost(itemEl, true); // true = focus new
+            } else {
+                e.target.blur();
+            }
+        }
+    });
+
+    // Focusout (Auto-save Ghost)
+    itemList.addEventListener('focusout', (e) => {
+        if (e.target.classList.contains('item-text')) {
+            const itemEl = e.target.closest('.item');
+            if (itemEl && itemEl.classList.contains('ghost')) {
+                // If text exists, save it
+                if (e.target.innerText.trim()) {
+                    commitGhost(itemEl, false); // false = don't focus new
+                } else {
+                    // Start fresh if empty (cleans up any weird whitespace)
+                    e.target.innerText = '';
+                }
+            }
         }
     });
 
@@ -86,8 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Functions ---
 
-    function addItem() {
-        const text = input.value.trim();
+    function commitGhost(ghostEl, shouldFocus) {
+        const text = ghostEl.querySelector('.item-text').innerText.trim();
         if (!text) return;
 
         const newItem = {
@@ -99,13 +132,27 @@ document.addEventListener('DOMContentLoaded', () => {
         items.push(newItem);
         saveItems();
 
-        // Optimistic UI Update (append only to avoid full re-render scroll jump)
-        itemList.appendChild(createItemElement(newItem));
-        input.value = '';
-        input.focus();
+        // Convert Ghost to Real Item in DOM (Optimistic)
+        ghostEl.classList.remove('ghost');
+        ghostEl.dataset.id = newItem.id;
+        // The HTML structure is already there, CSS reveals handles/delete buttons
 
-        // Scroll to bottom
-        itemList.scrollTo({ top: itemList.scrollHeight, behavior: 'smooth' });
+        // Append new Ghost
+        const newGhost = createGhostElement();
+        itemList.appendChild(newGhost);
+
+        if (shouldFocus) {
+            // Need small timeout for DOM to settle/scroll
+            requestAnimationFrame(() => {
+                const textEl = newGhost.querySelector('.item-text');
+                textEl.focus();
+                // Ensure visible
+                newGhost.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+        }
+
+        // If not focusing new (blur), we just leave everything as is. 
+        // The user clicked somewhere else, so focus is already going there.
     }
 
     function toggleItem(id) {
@@ -113,26 +160,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (item) {
             item.checked = !item.checked;
             saveItems();
-            // Partial Update
             const el = document.querySelector(`.item[data-id="${id}"]`);
-            if (el) {
-                el.classList.toggle('checked');
-            }
+            if (el) el.classList.toggle('checked');
         }
     }
 
     function deleteItem(id) {
-        items = items.filter(i => i.id !== id);
-        saveItems();
-        const el = document.querySelector(`.item[data-id="${id}"]`);
-        if (el) el.remove();
+        if (confirm('Delete this item?')) {
+            items = items.filter(i => i.id !== id);
+            saveItems();
+            const el = document.querySelector(`.item[data-id="${id}"]`);
+            if (el) el.remove();
+        }
     }
 
     function updateItemText(id, newText) {
         const item = items.find(i => i.id === id);
         if (item) {
             item.text = newText;
-            // Debounced save could be better, but instant is fine for local
             saveItems();
         }
     }
@@ -151,9 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('progress-count').innerText = `${checked}/${total} items`;
         document.getElementById('progress-fill').style.width = `${percent}%`;
     }
-
-    // Init Progress call
-    updateProgress();
 
     function applyTheme() {
         if (theme === 'dark') {
@@ -181,6 +223,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return li;
     }
 
+    function createGhostElement() {
+        // Create an item but with 'ghost' class
+        const li = createItemElement({ id: 'ghost', text: '', checked: false });
+        li.classList.add('ghost');
+        li.removeAttribute('data-id'); // Allow it to be just a ghost
+        return li;
+    }
+
     function renderList() {
         itemList.innerHTML = '';
         const frag = document.createDocumentFragment();
@@ -188,6 +238,10 @@ document.addEventListener('DOMContentLoaded', () => {
             frag.appendChild(createItemElement(item));
         });
         itemList.appendChild(frag);
+
+        // Append initial ghost
+        itemList.appendChild(createGhostElement());
+
         updateProgress();
     }
 
