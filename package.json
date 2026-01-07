@@ -1,0 +1,29 @@
+{
+  "name": "packinglist2.0",
+  "version": "1.0.0",
+  "description": "A modern, responsive, and easy-to-use packing list application designed to make travel preparation stress-free.",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Luc-AI/PackingList2.0.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Luc-AI/PackingList2.0/issues"
+  },
+  "homepage": "https://github.com/Luc-AI/PackingList2.0#readme",
+  "devDependencies": {
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "sortablejs": "^1.15.6"
+  }
+}
