@@ -84,6 +84,7 @@ async function handleAuthStateChange(state) {
 // --- Event Listeners (Async DB Actions) ---
 
 itemList.addEventListener('click', async (e) => {
+
     const itemEl = e.target.closest('.item');
     if (!itemEl || itemEl.classList.contains('ghost')) return;
 
@@ -156,12 +157,15 @@ itemList.addEventListener('focusout', async (e) => {
 });
 
 itemList.addEventListener('keydown', (e) => {
+    // debugger; // Removed debugger
     if (e.key === 'Enter' && e.target.classList.contains('item-text')) {
         e.preventDefault();
         const itemEl = e.target.closest('.item');
         if (itemEl && itemEl.classList.contains('ghost')) {
+            console.log('[UI] Enter pressed on ghost item');
             commitGhost(itemEl, true);
         } else {
+            console.log('[UI] Enter pressed on normal item');
             e.target.blur(); // Triggers focusout -> save
         }
     }
@@ -175,6 +179,7 @@ itemList.addEventListener('focusout', (e) => {
         const itemEl = e.target.closest('.item');
         if (itemEl && itemEl.classList.contains('ghost')) {
             if (e.target.innerText.trim()) {
+                console.log('[UI] Focus out on ghost item -> committing');
                 commitGhost(itemEl, false);
             } else {
                 e.target.innerText = '';
@@ -211,10 +216,17 @@ if (resetBtn) {
 }
 
 async function commitGhost(ghostEl, shouldFocus) {
+    if (ghostEl.dataset.isCommitting === 'true') {
+        console.warn('[UI] Prevented double commit on ghost item');
+        return;
+    }
+
     const text = ghostEl.querySelector('.item-text').innerText.trim();
     if (!text) return;
 
-    // Optimistic UI? No, for creation we need the DB ID to allow future edits.
+    // Mark as committing to prevent race conditions (Enter -> Blur -> Focusout)
+    ghostEl.dataset.isCommitting = 'true';
+    console.log('[App] Committing new item:', text);
     // So we must wait for DB.
 
     // Disable inputs?
